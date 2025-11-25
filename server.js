@@ -10,6 +10,7 @@ const logger = require('morgan');
 
 const testJwtRouter = require('./controllers/test-jwt');
 const authRouter = require('./controllers/auth');
+const profileRouter = require('./controllers/profile');
 
 mongoose.connect(process.env.MONGODB_URI);
 
@@ -28,6 +29,7 @@ app.get('/', (req, res) => {
 
 app.use('/test-jwt', testJwtRouter);
 app.use('/auth', authRouter);
+app.use('/profile', profileRouter);
 
 app.listen(3000, () => {
   console.log("connected to port 3000")
