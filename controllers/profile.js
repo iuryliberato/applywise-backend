@@ -98,12 +98,39 @@ router.post(
           "linkedin": "",
           "github": "",
           "portfolio": ""
-        }
+        },
+        "experience": [
+          {
+            "jobTitle": "",
+            "company": "",
+            "location": "",
+            "startDate": "",
+            "endDate": "",
+            "description": ""
+          }
+        ],
+        "education": [
+          {
+            "institution": "",
+            "degree": "",
+            "fieldOfStudy": "",
+            "startDate": "",
+            "endDate": ""
+          }
+        ]
       }
+      
+      Guidelines:
+      - "primarySkills" should be a list of key skills/technologies (e.g. ["JavaScript", "React", "Node.js"]).
+      - "yearsOfExperience" should be a number (rough estimate is ok).
+      - "experience" should list the main roles in reverse chronological order.
+      - "description" should summarise responsibilities/achievements for each role.
+      - "education" should include main degrees or courses.
       
       CV TEXT:
       ${cvText}
       `;
+      
 
       console.log('🤖 Calling OpenAI...');
 
@@ -148,9 +175,13 @@ const profile = await Profile.findOneAndUpdate(
     primarySkills: extracted.primarySkills || [],
     yearsOfExperience: extracted.yearsOfExperience || 0,
     links: extracted.links || {},
+
+    experience: extracted.experience || [],
+    education: extracted.education || [],
   },
   { new: true, upsert: true }
 );
+
       return res.json(profile);
     } catch (err) {
       console.error('CV parsing error:', err);
