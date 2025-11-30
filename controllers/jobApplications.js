@@ -3,10 +3,15 @@ const express = require('express');
 const verifyToken = require('../middleware/verify-token');
 const JobApplication = require('../models/jobApplication');
 const openai = require('../config/openai');
+const mongoose = require('mongoose');
+const Profile = require('../models/profile');    
+ 
+
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 
 const router = express.Router();
+
 
 // util: naive HTML → text
 function stripHtml(html) {
@@ -130,17 +135,31 @@ ${textForAi}
   }
 });
 
-// GET /job-applications/my → all applications for the logged-in user
-router.get('/my-application', verifyToken, async (req, res) => {
+router.get('/my-applications', verifyToken, async (req, res) => {
     try {
-      const apps = await JobApplication.find({ user: req.user._id })
-        .sort({ createdAt: -1 });
+      const { status } = req.query;
+      const ALLOWED_STATUSES = ['Idea', 'Applied', 'Interviewing', 'Tech-Test', 'Offer', 'Rejected'];
+  
+      // Always filter by user
+      const query = { user: req.user._id };
+  
+      // ✅ Only filter by status if the client actually sent a valid one
+      if (status && ALLOWED_STATUSES.includes(status)) {
+        query.status = status;
+      }
+  
+      const apps = await JobApplication
+        .find(query)
+        .sort({ updatedAt: -1 });
+  
       res.json(apps);
     } catch (err) {
       console.error('Get my applications error:', err);
       res.status(500).json({ error: 'Failed to fetch applications' });
     }
   });
+  
+  
   router.get('/:id', verifyToken, async (req, res) => {
     try {
       console.log('GET /job-applications/:id', req.params.id, 'user', req.user?._id);
@@ -160,6 +179,8 @@ router.get('/my-application', verifyToken, async (req, res) => {
       res.status(500).json({ error: 'Failed to fetch application' });
     }
   });
+
+
   // PATCH /job-applications/:id/status → update status for a single job
 router.patch('/:id/status', verifyToken, async (req, res) => {
   try {
@@ -186,6 +207,178 @@ router.patch('/:id/status', verifyToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to update status' });
   }
 });
+
+
+router.get('/my-applications/summary', verifyToken, async (req, res) => {
+    try {
+    const userId = mongoose.Types.ObjectId.createFromHexString(req.user._id);
+  
+      const pipeline = [
+        { $match: { user: userId } },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+          },
+        },
+      ];
+  
+      const raw = await JobApplication.aggregate(pipeline);
+  
+      const ALLOWED_STATUSES = ['Idea', 'Applied', 'Interviewing', 'Tech-Test', 'Offer', 'Rejected'];
+  
+      const summary = {};
+      ALLOWED_STATUSES.forEach((s) => {
+        summary[s] = 0;
+      });
+  
+      raw.forEach((row) => {
+        if (row._id && summary.hasOwnProperty(row._id)) {
+          summary[row._id] = row.count;
+        }
+      });
+  
+      res.json(summary);
+    } catch (err) {
+      console.error('Get applications summary error:', err);
+      res.status(500).json({ error: 'Failed to fetch summary' });
+    }
+  });
+  
+  
+  // GET /job-applications/my/recent?limit=5
+router.get('/my-applications/recent', verifyToken, async (req, res) => {
+    try {
+      const limit = Number(req.query.limit) || 5;
+  
+      const apps = await JobApplication
+        .find({ user: req.user._id })
+        .sort({ updatedAt: -1 })
+        .limit(limit);
+  
+      res.json(apps);
+    } catch (err) {
+      console.error('Get recent applications error:', err);
+      res.status(500).json({ error: 'Failed to fetch recent applications' });
+    }
+  });
+  
+  // POST /job-applications/:id/cover-letter
+// Generate a tailored cover letter based on the user's profile and this job
+router.post('/:id/cover-letter', verifyToken, async (req, res) => {
+    try {
+      const job = await JobApplication.findOne({
+        _id: req.params.id,
+        user: req.user._id,
+      });
+  
+      if (!job) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+  
+      const profile = await Profile.findOne({ user: req.user._id });
+      if (!profile) {
+        return res.status(400).json({ error: 'You need to create a profile first' });
+      }
+  
+      // Build a compact prompt with relevant info
+      const profileText = `
+  Name: ${profile.fullName || ''}
+  Headline: ${profile.headline || ''}
+  Location: ${profile.location || ''}
+  Summary: ${profile.summary || ''}
+  Experience: ${profile.experience || ''}
+  Education: ${profile.education || ''}
+
+  Primary skills: ${(profile.primarySkills || []).join(', ')}
+  Years of experience: ${profile.yearsOfExperience ?? 'N/A'}
+  
+  Links:
+  - LinkedIn: ${profile.links?.linkedin || ''}
+  - GitHub: ${profile.links?.github || ''}
+  - Portfolio: ${profile.links?.portfolio || ''}
+  `.trim();
+  
+      const jobText = `
+  Job title: ${job.jobTitle || ''}
+  Company: ${job.companyName || ''}
+  Location: ${job.location || ''}
+  Employment type: ${job.employmentType || ''}
+  Seniority: ${job.seniorityLevel || ''}
+  
+  Summary:
+  ${job.summary || ''}
+  
+  Responsibilities:
+  - ${(job.responsibilities || []).join('\n- ')}
+  
+  Requirements:
+  - ${(job.requirements || []).join('\n- ')}
+  
+  Nice to have:
+  - ${(job.niceToHave || []).join('\n- ')}
+  
+  Perks & benefits:
+  - ${(job.perksAndBenefits || []).join('\n- ')}
+  `.trim();
+  
+      const prompt = `
+  You are an assistant helping a software engineer write job applications.
+  
+  Using the CANDIDATE PROFILE and JOB DESCRIPTION below, write a tailored, concise cover letter in clear UK English.
+  
+  Guidelines:
+  - Start with a short, friendly intro.
+  - Mention the role and company by name.
+  - Highlight 3–4 of the most relevant skills and experiences from the candidate that match the job.
+  - Refer to responsibilities/requirements in a natural way (no bullet points, just paragraphs).
+  - Keep it to about 3–5 paragraphs, max 450–500 words.
+  - Do NOT invent experience that is not in the profile.
+  
+  CANDIDATE PROFILE:
+  ${profileText}
+  
+  JOB DESCRIPTION:
+  ${jobText}
+  `;
+  
+      const response = await openai.responses.create({
+        model: 'gpt-4.1-mini',
+        input: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        // no text.format → default plain text
+      });
+  
+      // Safely extract text
+      let coverLetter = '';
+      if (response.output_text) {
+        coverLetter = response.output_text;
+      } else if (
+        response.output &&
+        response.output[0] &&
+        response.output[0].content &&
+        response.output[0].content[0] &&
+        response.output[0].content[0].text
+      ) {
+        coverLetter = response.output[0].content[0].text;
+      }
+  
+      return res.json({ coverLetter });
+    } catch (err) {
+      console.error('Cover letter error:', err);
+      return res.status(500).json({ error: 'Failed to generate cover letter' });
+    }
+  });
+  
 
 
 module.exports = router;
