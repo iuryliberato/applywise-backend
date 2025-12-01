@@ -135,6 +135,51 @@ ${textForAi}
   }
 });
 
+// POST /job-applications
+// Create a job application manually (no link/AI)
+router.post('/', verifyToken, async (req, res) => {
+    try {
+      const {
+        jobTitle,
+        companyName,
+        location,
+        employmentType,
+        seniorityLevel,
+        summary,
+        responsibilities,
+        requirements,
+        niceToHave,
+        perksAndBenefits,
+        salaryInfo,
+        status,
+        source,
+      } = req.body;
+  
+      const job = await JobApplication.create({
+        user: req.user._id,
+        jobTitle,
+        companyName,
+        location,
+        employmentType,
+        seniorityLevel,
+        summary,
+        // expect arrays; fallback to [] if not provided
+        responsibilities: responsibilities || [],
+        requirements: requirements || [],
+        niceToHave: niceToHave || [],
+        perksAndBenefits: perksAndBenefits || [],
+        salaryInfo,
+        status,              // schema will lowercase if you set lowercase: true
+        source: source || 'Manual',
+      });
+  
+      res.status(201).json(job);
+    } catch (err) {
+      console.error('Create manual job error:', err);
+      res.status(500).json({ error: 'Failed to create application' });
+    }
+  });
+  
 router.get('/my-applications', verifyToken, async (req, res) => {
     try {
       const { status } = req.query;
@@ -379,6 +424,25 @@ router.post('/:id/cover-letter', verifyToken, async (req, res) => {
     }
   });
   
-
+// DELETE /job-applications/:id
+// Delete a single application belonging to the logged-in user
+router.delete('/:id', verifyToken, async (req, res) => {
+    try {
+      const deleted = await JobApplication.findOneAndDelete({
+        _id: req.params.id,
+        user: req.user._id,
+      });
+  
+      if (!deleted) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+  
+      res.json({ message: 'Application deleted' });
+    } catch (err) {
+      console.error('Delete application error:', err);
+      res.status(500).json({ error: 'Failed to delete application' });
+    }
+  });
+  
 
 module.exports = router;

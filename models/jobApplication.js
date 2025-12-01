@@ -11,7 +11,6 @@ const jobApplicationSchema = new mongoose.Schema(
 
     jobUrl: {
       type: String,
-      required: true,
     },
 
     source: {
@@ -24,6 +23,7 @@ const jobApplicationSchema = new mongoose.Schema(
 
     companyName: {
       type: String,
+      required: true,
     },
 
     location: {
@@ -41,6 +41,7 @@ const jobApplicationSchema = new mongoose.Schema(
     // AI-generated summary fields
     summary: {
       type: String,
+      required: true,
     },
 
     responsibilities: {
