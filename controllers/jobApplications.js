@@ -180,7 +180,7 @@ router.post('/', verifyToken, async (req, res) => {
     }
   });
   
-router.get('/my-applications', verifyToken, async (req, res) => {
+router.get('/my-applications', async (req, res) => {
     try {
       const { status } = req.query;
       const ALLOWED_STATUSES = ['Idea', 'Applied', 'Interviewing', 'Tech-Test', 'Offer', 'Rejected'];
@@ -423,9 +423,7 @@ router.post('/:id/cover-letter', verifyToken, async (req, res) => {
       return res.status(500).json({ error: 'Failed to generate cover letter' });
     }
   });
-  
-// DELETE /job-applications/:id
-// Delete a single application belonging to the logged-in user
+
 router.delete('/:id', verifyToken, async (req, res) => {
     try {
       const deleted = await JobApplication.findOneAndDelete({
@@ -444,5 +442,95 @@ router.delete('/:id', verifyToken, async (req, res) => {
     }
   });
   
+router.post('/:id/notes', verifyToken, async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Note text is required' });
+    }
+
+    const job = await JobApplication.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id }, // ensure it belongs to the logged-in user
+      {
+        $push: {
+          notes: {
+            text: text.trim(),
+          },
+        },
+      },
+      { new: true }
+    );
+
+    if (!job) {
+      return res
+        .status(404)
+        .json({ error: 'Application not found or not yours' });
+    }
+
+    return res.status(201).json(job);
+  } catch (err) {
+    console.error('Create note error:', err);
+    res.status(500).json({ error: 'Failed to create note' });
+  }
+});
+
+
+router.patch('/:id/notes/:noteId', verifyToken, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Note text is required' });
+    }
+
+    const job = await JobApplication.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        user: req.user._id,
+        'notes._id': req.params.noteId,
+      },
+      {
+        $set: {
+          'notes.$.text': text.trim(),
+          'notes.$.updatedAt': new Date(),
+        },
+      },
+      { new: true }
+    );
+
+    if (!job) {
+      return res
+        .status(404)
+        .json({ error: 'Application or note not found' });
+    }
+
+    res.json(job);
+  } catch (err) {
+    console.error('Update note error:', err);
+    res.status(500).json({ error: 'Failed to update note' });
+  }
+});
+
+
+router.delete('/:id/notes/:noteId', verifyToken, async (req, res) => {
+  try {
+    const job = await JobApplication.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      { $pull: { notes: { _id: req.params.noteId } } },
+      { new: true }
+    );
+
+    if (!job) {
+      return res
+        .status(404)
+        .json({ error: 'Application or note not found' });
+    }
+
+    res.json(job);
+  } catch (err) {
+    console.error('Delete note error:', err);
+    res.status(500).json({ error: 'Failed to delete note' });
+  }
+});
 
 module.exports = router;

@@ -1,6 +1,19 @@
 // models/jobApplication.js
 const mongoose = require('mongoose');
 
+// --- Note subdocument schema ---
+const noteSchema = new mongoose.Schema(
+    {
+      text: { type: String, required: true },
+  
+      createdAt: { type: Date, default: Date.now },
+      updatedAt: { type: Date },
+    },
+    {
+      _id: true, 
+    }
+  );
+
 const jobApplicationSchema = new mongoose.Schema(
   {
     user: {
@@ -78,6 +91,7 @@ const jobApplicationSchema = new mongoose.Schema(
       enum: ['Idea', 'Applied', 'Interviewing', 'Tech Test', 'Offer', 'Rejected'],
       default: 'Idea',
     },
+    notes: [noteSchema],
   },
   { timestamps: true }
 );
