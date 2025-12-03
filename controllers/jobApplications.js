@@ -180,7 +180,7 @@ router.post('/', verifyToken, async (req, res) => {
     }
   });
   
-router.get('/my-applications', async (req, res) => {
+router.get('/my-applications', verifyToken, async (req, res) => {
     try {
       const { status } = req.query;
       const ALLOWED_STATUSES = ['Idea', 'Applied', 'Interviewing', 'Tech-Test', 'Offer', 'Rejected'];
