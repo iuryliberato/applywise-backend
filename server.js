@@ -36,7 +36,7 @@ app.use('/auth', authRouter);
 app.use('/profile', profileRouter);
 app.use('/job-applications', jobApplicationsRouter);
 
-app.get('*', (req, res) => {
+app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
