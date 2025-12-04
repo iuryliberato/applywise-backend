@@ -80,7 +80,7 @@ ${textForAi}
 `;
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini', // or gpt-4.1-mini
+      model: 'gpt-5.1-mini', // or gpt-4.1-mini
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -388,7 +388,7 @@ router.post('/:id/cover-letter', verifyToken, async (req, res) => {
   `;
   
       const response = await openai.responses.create({
-        model: 'gpt-4.1-mini',
+        model: 'gpt-5.1-mini',
         input: [
           {
             role: 'user',
@@ -403,8 +403,12 @@ router.post('/:id/cover-letter', verifyToken, async (req, res) => {
         // no text.format → default plain text
       });
   
+
+      const coverLetterText = response.output[0].content[0].text; 
       // Safely extract text
-      let coverLetter = '';
+      job.coverLetter = coverLetterText;
+      await job.save();
+
       if (response.output_text) {
         coverLetter = response.output_text;
       } else if (
@@ -417,12 +421,38 @@ router.post('/:id/cover-letter', verifyToken, async (req, res) => {
         coverLetter = response.output[0].content[0].text;
       }
   
-      return res.json({ coverLetter });
+      return res.json({
+        coverLetter: job.coverLetter,
+        job,
+      });
     } catch (err) {
-      console.error('Cover letter error:', err);
-      return res.status(500).json({ error: 'Failed to generate cover letter' });
+      console.error('Generate cover letter error:', err);
+      res.status(500).json({ error: 'Failed to generate cover letter' });
     }
   });
+
+  // PATCH /job-applications/:id/cover-letter
+router.patch('/:id/cover-letter', verifyToken, async (req, res) => {
+    try {
+      const { coverLetter } = req.body;
+  
+      const updated = await JobApplication.findOneAndUpdate(
+        { _id: req.params.id, user: req.user._id },
+        { coverLetter },
+        { new: true }
+      );
+  
+      if (!updated) {
+        return res.status(404).json({ error: 'Application not found' });
+      }
+  
+      res.json(updated);
+    } catch (err) {
+      console.error('Update cover letter error:', err);
+      res.status(500).json({ error: 'Failed to update cover letter' });
+    }
+  });
+  
 
 router.delete('/:id', verifyToken, async (req, res) => {
     try {

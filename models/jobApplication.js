@@ -91,6 +91,7 @@ const jobApplicationSchema = new mongoose.Schema(
       enum: ['Idea', 'Applied', 'Interviewing', 'Tech Test', 'Offer', 'Rejected'],
       default: 'Idea',
     },
+    coverLetter: { type: String }, 
     notes: [noteSchema],
   },
   { timestamps: true }
