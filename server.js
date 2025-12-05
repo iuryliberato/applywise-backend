@@ -23,7 +23,15 @@ mongoose.connection.on('connected', () => {
 });
 
 
-app.use(cors());
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://applio-job-tracker-025135847b67.herokuapp.com';
+
+app.use(
+  cors({
+    origin: [FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'],
+    credentials: true,
+  })
+);
+
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 app.use(logger('dev'));
