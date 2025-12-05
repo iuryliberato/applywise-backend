@@ -1,18 +1,13 @@
-// models/jobApplication.js
 const mongoose = require('mongoose');
 
-// --- Note subdocument schema ---
 const noteSchema = new mongoose.Schema(
-    {
-      text: { type: String, required: true },
-  
-      createdAt: { type: Date, default: Date.now },
-      updatedAt: { type: Date },
-    },
-    {
-      _id: true, 
-    }
-  );
+  {
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date },
+  },
+  { _id: true }
+);
 
 const jobApplicationSchema = new mongoose.Schema(
   {
@@ -22,48 +17,28 @@ const jobApplicationSchema = new mongoose.Schema(
       required: true,
     },
 
-    jobUrl: {
-      type: String,
-    },
+    jobUrl: { type: String },
+    source: { type: String },
 
-    source: {
-      type: String, // e.g. 'LinkedIn', 'Indeed', 'Company Site'
-    },
+    jobTitle: { type: String },
+    companyName: { type: String, required: true },
+    location: { type: String },
 
-    jobTitle: {
-      type: String,
-    },
+    employmentType: { type: String },
+    seniorityLevel: { type: String },
 
-    companyName: {
-      type: String,
-      required: true,
-    },
-
-    location: {
-      type: String,
-    },
-
-    employmentType: {
-      type: String, // e.g. 'Full-time', 'Contract'
-    },
-
-    seniorityLevel: {
-      type: String, // e.g. 'Junior', 'Mid', 'Senior'
-    },
-
-    // AI-generated summary fields
     summary: {
       type: String,
       required: true,
     },
 
     responsibilities: {
-      type: [String], // bullet points
+      type: [String],
       default: [],
     },
 
     requirements: {
-      type: [String], // bullet points
+      type: [String],
       default: [],
     },
 
@@ -71,27 +46,23 @@ const jobApplicationSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+
     perksAndBenefits: {
-        type: [String],
-        default: [],
-      },
-
-    salaryInfo: {
-      type: String,
+      type: [String],
+      default: [],
     },
 
-    // Optional: raw text snippet that AI used
-    rawTextSnippet: {
-      type: String,
-    },
+    salaryInfo: { type: String },
+    rawTextSnippet: { type: String },
 
-    // Status of YOUR application
     status: {
       type: String,
       enum: ['Idea', 'Applied', 'Interviewing', 'Tech Test', 'Offer', 'Rejected'],
       default: 'Idea',
     },
-    coverLetter: { type: String }, 
+
+    coverLetter: { type: String },
+
     notes: [noteSchema],
   },
   { timestamps: true }

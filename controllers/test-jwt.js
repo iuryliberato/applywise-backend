@@ -1,11 +1,8 @@
-// controllers/test-jwt.js
 
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 
-
-// controllers/test-jwt.js
 router.get('/sign-token', (req, res) => {
     const user = {
       id: 1,
@@ -16,11 +13,10 @@ router.get('/sign-token', (req, res) => {
     res.json({ token });
   });
 
-// controllers/test-jwt.js
+
 router.post('/verify-token', (req, res) => {
     try {
       const token = req.headers.authorization.split(' ')[1];
-      // Add in verify method
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
   
       res.json({ decoded });
