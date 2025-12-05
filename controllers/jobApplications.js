@@ -6,8 +6,6 @@ const mongoose = require('mongoose');
 const Profile = require('../models/profile');
 const { normalizeJobUrl } = require('../utils/normalizeJobUrl');
 
-
-
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
 const SCRAPER_BASE_URL = 'https://api.scraperapi.com';
 
@@ -17,21 +15,17 @@ function buildScraperUrl(targetUrl) {
   const params = new URLSearchParams({
     api_key: SCRAPER_API_KEY,
     url: targetUrl,
-    // you can also add render=true if you want JS rendering:
-    // render: 'true',
+  
   });
 
   const host = urlObj.hostname;
 
-  // Protected domains that need premium mode
   if (host.includes('indeed.com') || host.includes('linkedin.com')) {
-    params.set('premium', 'true');        // or 'ultra_premium' if your plan allows
+    params.set('ultra_premium=true', 'true');       
   }
 
   return `${SCRAPER_BASE_URL}?${params.toString()}`;
 }
-
-
 
 
 const fetch = (...args) =>
