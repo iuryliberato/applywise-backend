@@ -8,15 +8,25 @@ const { normalizeJobUrl } = require('../utils/normalizeJobUrl');
 
 
 
-
 const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
 const SCRAPER_BASE_URL = 'https://api.scraperapi.com';
 
 function buildScraperUrl(targetUrl) {
+  const urlObj = new URL(targetUrl);
+
   const params = new URLSearchParams({
     api_key: SCRAPER_API_KEY,
     url: targetUrl,
+    // you can also add render=true if you want JS rendering:
+    // render: 'true',
   });
+
+  const host = urlObj.hostname;
+
+  // Protected domains that need premium mode
+  if (host.includes('indeed.com') || host.includes('linkedin.com')) {
+    params.set('premium', 'true');        // or 'ultra_premium' if your plan allows
+  }
 
   return `${SCRAPER_BASE_URL}?${params.toString()}`;
 }
@@ -58,51 +68,51 @@ router.post('/from-link', verifyToken, async (req, res) => {
       ? incomingStatus
       : 'Idea';
 
-    const finalJobUrl = normalizeJobUrl(jobUrl);
-    console.log('Original URL:', jobUrl);
-    console.log('Normalized URL:', finalJobUrl);
-
-    // ✅ New: ensure scraper is configured
     if (!SCRAPER_API_KEY) {
-      return res.status(500).json({
-        error:
-          'Scraper API key not configured. Please set SCRAPER_API_KEY in your environment.',
-      });
+      console.error('SCRAPER_API_KEY is missing');
+      return res
+        .status(500)
+        .json({ error: 'Server misconfigured: missing Scraper API key' });
     }
 
-    // ✅ New: go through scraping API instead of direct fetch
+    const finalJobUrl = normalizeJobUrl(jobUrl);
+    console.log('Original jobUrl:', jobUrl);
+    console.log('Final normalized jobUrl:', finalJobUrl);
+
     const scraperUrl = buildScraperUrl(finalJobUrl);
-    console.log('Scraper URL:', scraperUrl);
+    console.log(
+      'Calling ScraperAPI:',
+      scraperUrl.replace(SCRAPER_API_KEY, '***') // hide key in logs
+    );
 
     const response = await fetch(scraperUrl, {
-      // Most scraping APIs ignore headers, but it's fine to keep this minimal
       redirect: 'follow',
     });
 
     const httpStatus = response.status;
-    const html = await response.text();
-
+    const body = await response.text(); // read body once
     if (!response.ok) {
-      // Helpful debug log (not sent to frontend)
       console.error(
-        'Scraper fetch failed:',
+        'ScraperAPI error:',
         httpStatus,
-        html.slice(0, 500)
+        body.slice(0, 500)
       );
-
+    
       let message = `Failed to fetch job URL via scraping API (status ${httpStatus})`;
-
-      if (httpStatus === 403 || httpStatus === 401) {
+    
+      if (body.includes('Protected domains may require adding premium=true')) {
         message =
-          'Could not read that job page via the scraping service. This might be due to API limits or the site being blocked by the scraper. Please try a different source or paste the job details manually.';
+          'This job website requires a premium scraping mode. Try a different source (e.g. company careers page) or paste the job details manually.';
       }
-
-      return res.status(400).json({
+    
+      return res.status(502).json({
         error: message,
         upstreamStatus: httpStatus,
       });
     }
+    
 
+    const html = body;
     const text = stripHtml(html);
     const textForAi = text.slice(0, 12000);
 
@@ -148,7 +158,7 @@ ${textForAi}
     try {
       extracted = JSON.parse(raw);
     } catch (err) {
-      console.error('AI JSON parse error:', err, raw);
+      console.error('Failed to parse AI JSON:', raw);
       return res
         .status(500)
         .json({ error: 'Failed to parse AI response as JSON' });
@@ -175,7 +185,7 @@ ${textForAi}
 
     return res.status(201).json(jobApp);
   } catch (err) {
-    console.error('Error in /from-link:', err);
+    console.error('Error in /job-applications/from-link:', err);
     return res.status(500).json({ error: 'Failed to process job link' });
   }
 });
