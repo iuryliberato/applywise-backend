@@ -6,6 +6,24 @@ const mongoose = require('mongoose');
 const Profile = require('../models/profile');
 const { normalizeJobUrl } = require('../utils/normalizeJobUrl');
 
+
+
+
+const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
+const SCRAPER_BASE_URL = 'https://api.scraperapi.com';
+
+function buildScraperUrl(targetUrl) {
+  const params = new URLSearchParams({
+    api_key: SCRAPER_API_KEY,
+    url: targetUrl,
+  });
+
+  return `${SCRAPER_BASE_URL}?${params.toString()}`;
+}
+
+
+
+
 const fetch = (...args) =>
   import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
@@ -19,7 +37,6 @@ function stripHtml(html) {
     .replace(/\s+/g, ' ')
     .trim();
 }
-
 router.post('/from-link', verifyToken, async (req, res) => {
   try {
     const { jobUrl, status: incomingStatus } = req.body;
@@ -42,14 +59,23 @@ router.post('/from-link', verifyToken, async (req, res) => {
       : 'Idea';
 
     const finalJobUrl = normalizeJobUrl(jobUrl);
+    console.log('Original URL:', jobUrl);
+    console.log('Normalized URL:', finalJobUrl);
 
-    const response = await fetch(finalJobUrl, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
+    // ✅ New: ensure scraper is configured
+    if (!SCRAPER_API_KEY) {
+      return res.status(500).json({
+        error:
+          'Scraper API key not configured. Please set SCRAPER_API_KEY in your environment.',
+      });
+    }
+
+    // ✅ New: go through scraping API instead of direct fetch
+    const scraperUrl = buildScraperUrl(finalJobUrl);
+    console.log('Scraper URL:', scraperUrl);
+
+    const response = await fetch(scraperUrl, {
+      // Most scraping APIs ignore headers, but it's fine to keep this minimal
       redirect: 'follow',
     });
 
@@ -57,11 +83,18 @@ router.post('/from-link', verifyToken, async (req, res) => {
     const html = await response.text();
 
     if (!response.ok) {
-      let message = `Failed to fetch job URL (status ${httpStatus})`;
+      // Helpful debug log (not sent to frontend)
+      console.error(
+        'Scraper fetch failed:',
+        httpStatus,
+        html.slice(0, 500)
+      );
 
-      if (httpStatus === 403) {
+      let message = `Failed to fetch job URL via scraping API (status ${httpStatus})`;
+
+      if (httpStatus === 403 || httpStatus === 401) {
         message =
-          'Could not read that job page. This website is blocking automatic access. Please try a different source or paste the job details manually.';
+          'Could not read that job page via the scraping service. This might be due to API limits or the site being blocked by the scraper. Please try a different source or paste the job details manually.';
       }
 
       return res.status(400).json({
@@ -115,6 +148,7 @@ ${textForAi}
     try {
       extracted = JSON.parse(raw);
     } catch (err) {
+      console.error('AI JSON parse error:', err, raw);
       return res
         .status(500)
         .json({ error: 'Failed to parse AI response as JSON' });
@@ -141,6 +175,7 @@ ${textForAi}
 
     return res.status(201).json(jobApp);
   } catch (err) {
+    console.error('Error in /from-link:', err);
     return res.status(500).json({ error: 'Failed to process job link' });
   }
 });
