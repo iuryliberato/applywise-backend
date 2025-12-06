@@ -6,30 +6,39 @@ const mongoose = require('mongoose');
 const Profile = require('../models/profile');
 const { normalizeJobUrl } = require('../utils/normalizeJobUrl');
 
-const SCRAPER_API_KEY = process.env.SCRAPER_API_KEY;
-const SCRAPER_BASE_URL = 'https://api.scraperapi.com';
-
-function buildScraperUrl(targetUrl) {
-  const urlObj = new URL(targetUrl);
-
-  const params = new URLSearchParams({
-    api_key: SCRAPER_API_KEY,
-    url: targetUrl,
-  
-  });
-
-  const host = urlObj.hostname;
-
-  if (host.includes('indeed.com') || host.includes('linkedin.com')) {
-    params.set('ultra_premium=true', 'true');       
-  }
-
-  return `${SCRAPER_BASE_URL}?${params.toString()}`;
-}
-
-
 const fetch = (...args) =>
   import('node-fetch').then(({ default: fetch }) => fetch(...args));
+
+async function fetchWithTimeoutAndRetry(
+  url,
+  options = {},
+  { timeoutMs = 20000, retries = 1 } = {}
+) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      return res;
+    } catch (err) {
+      clearTimeout(timeout);
+
+      const isLast = attempt === retries;
+      const aborted = err.name === 'AbortError';
+
+      if (isLast || !aborted) {
+        throw err;
+      }
+
+      console.warn(`Retrying fetch (${attempt + 1}) for`, url);
+    }
+  }
+}
 
 const router = express.Router();
 
@@ -41,6 +50,10 @@ function stripHtml(html) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+// =======================
+// Create from link (direct fetch, no ScraperAPI)
+// =======================
 router.post('/from-link', verifyToken, async (req, res) => {
   try {
     const { jobUrl, status: incomingStatus } = req.body;
@@ -62,49 +75,58 @@ router.post('/from-link', verifyToken, async (req, res) => {
       ? incomingStatus
       : 'Idea';
 
-    if (!SCRAPER_API_KEY) {
-      console.error('SCRAPER_API_KEY is missing');
-      return res
-        .status(500)
-        .json({ error: 'Server misconfigured: missing Scraper API key' });
-    }
-
     const finalJobUrl = normalizeJobUrl(jobUrl);
     console.log('Original jobUrl:', jobUrl);
     console.log('Final normalized jobUrl:', finalJobUrl);
 
-    const scraperUrl = buildScraperUrl(finalJobUrl);
-    console.log(
-      'Calling ScraperAPI:',
-      scraperUrl.replace(SCRAPER_API_KEY, '***') // hide key in logs
-    );
-
-    const response = await fetch(scraperUrl, {
-      redirect: 'follow',
-    });
+    let response;
+    try {
+      response = await fetchWithTimeoutAndRetry(
+        finalJobUrl,
+        {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ' +
+              'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+              'Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          redirect: 'follow',
+        },
+        { timeoutMs: 20000, retries: 1 }
+      );
+    } catch (err) {
+      console.error('Error fetching job URL directly:', err);
+      return res.status(502).json({
+        error:
+          'Could not reach that job page. The site may be blocking access or is temporarily down. Try again later or paste the job details manually.',
+      });
+    }
 
     const httpStatus = response.status;
-    const body = await response.text(); // read body once
+    const body = await response.text();
+
     if (!response.ok) {
-      console.error(
-        'ScraperAPI error:',
-        httpStatus,
-        body.slice(0, 500)
-      );
-    
-      let message = `Failed to fetch job URL via scraping API (status ${httpStatus})`;
-    
-      if (body.includes('Protected domains may require adding premium=true')) {
+      console.error('Direct fetch error:', httpStatus, body.slice(0, 500));
+
+      let message = `Failed to fetch job URL (status ${httpStatus}).`;
+
+      if (httpStatus === 403) {
         message =
-          'This job website requires a premium scraping mode. Try a different source (e.g. company careers page) or paste the job details manually.';
+          'Could not read that job page. This website is blocking automatic access. Please try a different source, like the company careers page, or paste the job details manually.';
+      } else if (httpStatus === 404) {
+        message =
+          'This job link returned 404 (not found). The posting may have expired or the URL is incorrect.';
+      } else if (httpStatus >= 500) {
+        message =
+          'The job site is having issues. Try again in a bit, or paste the job description manually.';
       }
-    
-      return res.status(502).json({
+
+      return res.status(400).json({
         error: message,
         upstreamStatus: httpStatus,
       });
     }
-    
 
     const html = body;
     const text = stripHtml(html);
