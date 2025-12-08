@@ -64,6 +64,12 @@ const jobApplicationSchema = new mongoose.Schema(
     coverLetter: { type: String },
 
     notes: [noteSchema],
+    aiCvData: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+    aiCvUpdatedAt: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );
