@@ -30,6 +30,8 @@ router.post('/my-profile', verifyToken, async (req, res) => {
     interests,
     links,
     cvUrl,
+    experience,
+    education,
   } = req.body;
 
   const profile = await Profile.findOneAndUpdate(
@@ -46,12 +48,44 @@ router.post('/my-profile', verifyToken, async (req, res) => {
       interests,
       links,
       cvUrl,
+      experience,
+      education,
     },
     { new: true, upsert: true }
   );
 
   res.json(profile);
 });
+
+router.put('/my-profile', verifyToken, async (req, res) => {
+  try {
+    const profile = await Profile.findOneAndUpdate(
+      { user: req.user._id },
+      {
+        user: req.user._id,
+        fullName: req.body.fullName,
+        headline: req.body.headline,
+        location: req.body.location,
+        summary: req.body.summary,
+        primarySkills: req.body.primarySkills,
+        projects: req.body.projects,
+        yearsOfExperience: req.body.yearsOfExperience,
+        interests: req.body.interests,
+        links: req.body.links,
+        cvUrl: req.body.cvUrl,
+        experience: req.body.experience,
+        education: req.body.education,
+      },
+      { new: true, upsert: true }
+    );
+
+    res.json(profile);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ err: 'Failed to save profile' });
+  }
+});
+
 
 router.post(
   '/my-profile/cv',
@@ -82,11 +116,11 @@ router.post(
         "location": "",
         "primarySkills": [],
         "yearsOfExperience": 0,
-        "projects": {
+        "projects": [
           "name": "",
           "tech": ",
           "description": "",
-        },
+       ],
         "interests": [],
         "links": {
           "linkedin": "",
