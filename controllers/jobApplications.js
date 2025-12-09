@@ -624,7 +624,8 @@ router.post('/:id/ai-cv', verifyToken, async (req, res) => {
         .json({ error: 'You need to create a profile / upload a CV first' });
     }
 
-    // 3) Build compact payloads for AI (avoid dumping the whole DB doc)
+    
+    
     const profileForAi = {
       fullName: profile.fullName || '',
       headline: profile.headline || '',
@@ -633,6 +634,7 @@ router.post('/:id/ai-cv', verifyToken, async (req, res) => {
       primarySkills: profile.primarySkills || [],
       yearsOfExperience: profile.yearsOfExperience ?? null,
       links: profile.links || {},
+    
       experience: (profile.experience || []).map((exp) => ({
         jobTitle: exp.jobTitle || '',
         company: exp.company || '',
@@ -641,6 +643,7 @@ router.post('/:id/ai-cv', verifyToken, async (req, res) => {
         endDate: exp.endDate || '',
         description: exp.description || '',
       })),
+    
       education: (profile.education || []).map((edu) => ({
         institution: edu.institution || '',
         degree: edu.degree || '',
@@ -648,8 +651,28 @@ router.post('/:id/ai-cv', verifyToken, async (req, res) => {
         startDate: edu.startDate || '',
         endDate: edu.endDate || '',
       })),
+    
+      // ✅ from profile. (singular)
+      projects: (profile.projects || []).map((proj) => ({
+        name: proj.name || '',
+        techStack: Array.isArray(proj.techStack)
+          ? proj.techStack
+          : (proj.tech || '')
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean),
+        link: proj.link || '',
+        bullets: Array.isArray(proj.bullets)
+          ? proj.bullets
+          : (proj.description || '')
+              .split('\n')
+              .map((line) => line.trim())
+              .filter(Boolean),
+      })),
+    
+      interests: profile.interests || [],
     };
-
+    
     const jobForAi = {
       jobTitle: job.jobTitle || '',
       companyName: job.companyName || '',
@@ -663,60 +686,68 @@ router.post('/:id/ai-cv', verifyToken, async (req, res) => {
       perksAndBenefits: job.perksAndBenefits || [],
       salaryInfo: job.salaryInfo || '',
       source: job.source || '',
+      // no interests here; they come from profile
     };
+
+
 
     // 4) Ask OpenAI for a structured CV tailored to this job
     const cvSchema = `{
-      "fullName": "string",
-      "headline": "string",
-        "contact": {
-    "email": "string",
-    "location": "string",
-    "linkedin": "string",
-    "github": "string",
-    "portfolio": "string"
-  },
-      "summary": "string",
-       "skills": {
-    "frontend": ["string"],
-    "backend": ["string"],
-    "toolsAndPractices": ["string"],
-    "languages": ["string"]
-  },
+      "fullName": "Jane Doe",
+      "headline": "Junior Frontend Engineer",
+      "contact": {
+        "email": "jane.doe@email.com",
+        "location": "Dublin, Ireland",
+        "linkedin": "https://www.linkedin.com/in/jane-doe",
+        "github": "https://github.com/janedoe",
+        "portfolio": "https://janedoe.dev"
+      },
+      "summary": "2–3 line professional summary tailored to the target role.",
+      "skills": {
+        "frontend": ["React", "TypeScript", "HTML5", "CSS3"],
+        "backend": ["Node.js", "Express"],
+        "toolsAndPractices": ["Git", "Jest", "Agile", "CI/CD"],
+        "languages": ["English", "Portuguese"]
+      },
       "experience": [
         {
-          "company": "string",
-          "role": "string",
-          "location": "string",
-          "start": "string",
-          "end": "string",
-          "bullets": ["string"]
+          "company": "Company Name",
+          "role": "Job Title",
+          "location": "City, Country",
+          "start": "MMM YYYY",
+          "end": "MMM YYYY or 'Present'",
+          "bullets": [
+            "Achievement-focused bullet with impact.",
+            "Another bullet."
+          ]
         }
       ],
       "projects": [
         {
-          "name": "string",
-          "techStack": ["string"],
-          "bullets": ["string"]
+          "name": "Project Name",
+          "techStack": ["React", "Node.js", "MongoDB"],
+          "bullets": [
+            "Short bullet describing what you built and why it matters."
+          ]
         }
       ],
       "education": [
         {
-          "school": "string",
-          "degree": "string",
-          "start": "string",
-          "end": "string"
+          "school": "School or Bootcamp Name",
+          "degree": "Course / Degree",
+          "start": "MMM YYYY",
+          "end": "MMM YYYY"
         }
       ],
-       "interests": ["string"],
+      "interests": ["Open-source", "Hiking", "Mentoring juniors"],
       "layoutHints": {
         "sections": [
-          { "id": "summary",   "dividerAfter": true,  "keepTogether": true },
-          { "id": "skills",    "dividerAfter": true,  "keepTogether": true },
-          { "id": "experience","dividerAfter": true,  "keepTogether": true },
-          { "id": "projects",  "dividerAfter": true,  "keepTogether": true },
-          { "id": "education", "dividerAfter": true,  "keepTogether": true },
-          { "id": "extras",    "dividerAfter": false, "keepTogether": true }
+          { "id": "summary",    "dividerAfter": true,  "keepTogether": true },
+          { "id": "skills",     "dividerAfter": true,  "keepTogether": true },
+          { "id": "experience", "dividerAfter": true,  "keepTogether": true },
+          { "id": "projects",   "dividerAfter": true,  "keepTogether": true },
+          { "id": "education",  "dividerAfter": true,  "keepTogether": true },
+          { "id": "extras",     "dividerAfter": false, "keepTogether": true }
         ]
       }
     }`;
@@ -743,7 +774,6 @@ router.post('/:id/ai-cv', verifyToken, async (req, res) => {
     - Rewrite the CV to sound more results-driven, quantifiable, and compelling for the target role.
     - Focus on achievements, not just duties or responsibilities.
     - Use strong, varied action verbs and clear, concise language.
-    - Wherever reasonable, include conservative, plausible metrics (e.g. “reduced errors”, “improved response time”) without inventing unrealistic achievements.
     
     --------------------------------------
     3) ATS boost
@@ -785,9 +815,36 @@ router.post('/:id/ai-cv', verifyToken, async (req, res) => {
       - draw subtle grey dividers between sections ("dividerAfter": true/false).
     
     --------------------------------------
+    7) Projects formatting
+    - For each item in the "projects" array:
+    - Use "name" as the project title.
+    - Use "bullets" as an array of EXACTLY TWO bullet points.
+    - Bullet 1: one concise sentence describing what the project is, key features, and (if available) context like Solo/Group and duration.
+    - Bullet 2: one concise sentence describing the candidate's concrete contributions, impact, or implementation details.
+    - Keep bullets short, resume-style, and easy to scan.
+    - Do NOT output separate "Tech: ..." lines; if relevant, mention technologies inside the bullets themselves.
+     
+    8) Experience Formatting 
+    - For each role in the "experience" array:
+    - Provide a "bullets" array with EXACTLY TWO bullet points.
+    - Bullet 1: a concise sentence summarising the core responsibilities and scope.
+    - Bullet 2: a concise sentence highlighting measurable impact, improvements, or key achievements.
+    - Keep bullets short, scannable, and focused on outcomes (not generic duties).
+    - Do NOT use paragraphs in experience; always use bullet points.
+
+    --------------------------------------
     Global rules
     - Target roughly 1–2 pages of CV content.
     - Never invent fake companies, degrees, or specific technologies.
+    - You MUST NOT invent employers, dates, degrees, certifications, or technologies that are not present in the user data.
+    - You MUST NOT invent any data that doesn't exist in the profile user data.
+    - You MAY rephrase text to be clearer, more concise, or more impactful.
+    - Contact and skills data must come from the candidate profile or the job
+     description only. If something is missing, leave it blank or omit it.
+    - Map profile.projects → CV "projects" (preserve names/links; you may rewrite bullets).
+    - Map the "projects" array in the candidate profile JSON to the CV "projects" section.
+    - Map profile.interests → CV "interests" as short phrases.
+     - Do NOT invent new projects or interests that are not in profile.projects/profile.interests.
     - Do NOT output critique or explanation. Silently apply all improvements inside the final CV data.
     - Output ONLY valid JSON matching the schema string given by the user, with no extra commentary before or after.
         `.trim(),
@@ -981,7 +1038,7 @@ if (cvData.headline || profile.headline) {
   spaceXs(doc);
   doc
     .fontSize(12)
-    .font('Helvetica-Oblique')
+    .font('Helvetica-Bold')
     .text(cvData.headline || profile.headline, { align: 'left' });
 }
 
@@ -994,7 +1051,9 @@ if (
   contact.github ||
   contact.portfolio
 ) {
-  spaceXs(doc);
+  spaceMd(doc);
+  drawDivider(doc);
+  spaceLg(doc)
 
   if (contact.email) {
     doc
@@ -1043,8 +1102,9 @@ if (
 }
 
 // gap then divider
-spaceSm(doc);
+spaceLg(doc);
 drawDivider(doc);
+spaceLg(doc)
 // ---- SUMMARY ----
 if (cvData.summary) {
   const hint = sectionHints.summary || {};
@@ -1052,15 +1112,17 @@ if (cvData.summary) {
 
   drawSectionHeader(doc, 'Professional Summary');
 
+  spaceSm(doc);
+
   doc
     .fontSize(10)
     .font('Helvetica')
     .text(cvData.summary, { align: 'left' });
 
-  spaceMd(doc);
+    spaceLg(doc);
   if (hint.dividerAfter !== false) drawDivider(doc);
 }
-
+spaceLg(doc)
 // ---- SKILLS ----
 if (cvData.skills) {
   const hint = sectionHints.skills || {};
@@ -1068,7 +1130,7 @@ if (cvData.skills) {
 
   ensureSpaceForSection(doc, 110);
   drawSectionHeader(doc, 'Technical Skills');
-
+  spaceXs(doc);
   doc.fontSize(10);
 
   if (skills.frontend?.length) {
@@ -1103,9 +1165,10 @@ if (cvData.skills) {
       .text(skills.languages.join(', '));
   }
 
-  spaceMd(doc);
+  spaceLg(doc);
   if (hint.dividerAfter !== false) drawDivider(doc);
 }
+spaceLg(doc)
 
 // ---- PROJECTS ----
 if (Array.isArray(cvData.projects) && cvData.projects.length > 0) {
@@ -1113,45 +1176,51 @@ if (Array.isArray(cvData.projects) && cvData.projects.length > 0) {
 
   ensureSpaceForSection(doc, cvData.projects.length * 60);
   drawSectionHeader(doc, 'Projects');
+  spaceXs(doc);
 
-  cvData.projects.forEach((proj) => {
+  cvData.projects.forEach((proj, idx) => {
+    // Project title line
     if (proj.name) {
       doc
         .fontSize(10)
         .font('Helvetica-Bold')
-        .text(proj.name);
+        .text(`${proj.name} - Tech: ${proj.techStack.join(', ')}`);
     }
 
-    if (Array.isArray(proj.techStack) && proj.techStack.length > 0) {
-      doc
-        .fontSize(9)
-        .font('Helvetica-Oblique')
-        .text(`Tech: ${proj.techStack.join(', ')}`);
-    }
+    // Exactly TWO bullets, short + clean
+    const bullets = Array.isArray(proj.bullets)
+      ? proj.bullets.filter((b) => b && b.trim()).slice(0, 2)
+      : [];
 
-    if (Array.isArray(proj.bullets) && proj.bullets.length > 0) {
-      doc.moveDown(0.1);
-      proj.bullets.forEach((b) => {
-        if (b && b.trim()) {
-          doc
-            .fontSize(9)
-            .font('Helvetica')
-            .text(`• ${b.trim()}`, { indent: 10 });
-        }
+    if (bullets.length > 0) {
+      spaceXs(doc);
+      bullets.forEach((b) => {
+        doc
+          .fontSize(9)
+          .font('Helvetica')
+          .text(`• ${b.trim()}`, { indent: 10 });
       });
     }
 
-    doc.moveDown(0.5);
+    // Small gap between projects
+    if (idx < cvData.projects.length - 1) {
+      spaceSm(doc);
+    }
   });
 
+  spaceLg(doc);
   if (hint.dividerAfter !== false) drawDivider(doc);
 }
+
+
+spaceLg(doc)
 // ---- EXPERIENCE ----
 if (Array.isArray(cvData.experience) && cvData.experience.length > 0) {
   const hint = sectionHints.experience || {};
 
   ensureSpaceForSection(doc, cvData.experience.length * 70);
   drawSectionHeader(doc, 'Experience');
+  spaceXs(doc);
 
   cvData.experience.forEach((exp, idx) => {
     // Role + company (bold)
@@ -1161,33 +1230,21 @@ if (Array.isArray(cvData.experience) && cvData.experience.length > 0) {
         .font('Helvetica-Bold')
         .text(exp.role || '', { continued: !!exp.company })
         .font('Helvetica-Bold')
-        .text(exp.company ? ` — ${exp.company}` : '');
+        .text(exp.company ? ` — ${exp.company} (${exp.location} | ${exp.start || ''} – ${exp.end || 'Present'})` : '');
     }
 
-    // Meta line
-    const metaParts = [];
-    if (exp.location) metaParts.push(exp.location);
-    const period = `${exp.start || ''} – ${exp.end || 'Present'}`.trim();
-    if (period && period !== '– Present') metaParts.push(period);
-    const metaLine = metaParts.join(' | ');
+    // Bullets: EXACTLY TWO, short + impact-focused
+    const bullets = Array.isArray(exp.bullets)
+      ? exp.bullets.filter((b) => b && b.trim()).slice(0, 2)
+      : [];
 
-    if (metaLine) {
-      doc
-        .fontSize(9)
-        .font('Helvetica-Oblique')
-        .text(metaLine);
-    }
-
-    // Bullets
-    if (Array.isArray(exp.bullets) && exp.bullets.length > 0) {
+    if (bullets.length > 0) {
       spaceXs(doc);
-      exp.bullets.forEach((b) => {
-        if (b && b.trim()) {
-          doc
-            .fontSize(9)
-            .font('Helvetica')
-            .text(`• ${b.trim()}`, { indent: 10 });
-        }
+      bullets.forEach((b) => {
+        doc
+          .fontSize(9)
+          .font('Helvetica')
+          .text(`• ${b.trim()}`, { indent: 10 });
       });
     }
 
@@ -1197,15 +1254,17 @@ if (Array.isArray(cvData.experience) && cvData.experience.length > 0) {
     }
   });
 
-  spaceMd(doc);
+  spaceLg(doc);
   if (hint.dividerAfter !== false) drawDivider(doc);
 }
+
+spaceLg(doc)
 if (Array.isArray(cvData.education) && cvData.education.length > 0) {
   const hint = sectionHints.education || {};
 
   ensureSpaceForSection(doc, cvData.education.length * 24);
   drawSectionHeader(doc, 'Education');
-
+  spaceXs(doc);
   cvData.education.forEach((edu, idx) => {
     const parts = [];
     if (edu.degree) parts.push(edu.degree);
@@ -1230,11 +1289,11 @@ if (Array.isArray(cvData.education) && cvData.education.length > 0) {
     }
   });
 
-  spaceMd(doc);
+  spaceLg(doc)
   if (hint.dividerAfter !== false) drawDivider(doc);
 }
 
-
+spaceLg(doc)
 // ---- INTERESTS ----
 const interests = Array.isArray(cvData.interests)
   ? cvData.interests
@@ -1247,7 +1306,7 @@ if (interests.length > 0) {
 
   ensureSpaceForSection(doc, interests.length * 18 + 40);
   drawSectionHeader(doc, 'Interests');
-
+  spaceXs(doc);
   interests.forEach((interest, idx) => {
     if (interest && interest.trim()) {
       doc

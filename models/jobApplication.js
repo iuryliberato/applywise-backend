@@ -57,7 +57,7 @@ const jobApplicationSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['Idea', 'Applied', 'Interviewing', 'Tech Test', 'Offer', 'Rejected'],
+      enum: ['Idea', 'Applied', 'Interviewing', 'Tech-Test', 'Offer', 'Rejected'],
       default: 'Idea',
     },
 

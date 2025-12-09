@@ -23,6 +23,8 @@ const educationSchema = new mongoose.Schema(
   { _id: false }
 );
 
+
+
 const profileSchema = new mongoose.Schema(
   {
     user: {
@@ -42,7 +44,6 @@ const profileSchema = new mongoose.Schema(
 
     cvUrl: { type: String },
     cvLastParsedAt: { type: Date },
-
     experience: {
       type: [experienceSchema],
       default: [],
@@ -52,12 +53,21 @@ const profileSchema = new mongoose.Schema(
       type: [educationSchema],
       default: [],
     },
-
+    projects: [
+      {
+        name: String,
+        tech: String,       
+        description: String,
+      },
+    ],
+    interests: [String],
     links: {
       linkedin: { type: String },
       github: { type: String },
       portfolio: { type: String },
     },
+
+    
   },
   { timestamps: true }
 );
